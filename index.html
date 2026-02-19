@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raven Skull Liquid Goal Widget</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100vh;
+    font-family: 'Georgia', serif;
+    overflow: hidden;
+  }
+
+  .widget-container {
+    position: relative;
+    width: 520px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  /* ── Skull mask container ── */
+  .skull-wrapper {
+    position: relative;
+    width: 480px;
+    height: 300px;
+    filter: drop-shadow(0 0 18px rgba(160, 80, 255, 0.85))
+            drop-shadow(0 0 40px rgba(120, 40, 220, 0.5));
+  }
+
+  /* The skull PNG sits on top of everything */
+  .skull-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  /* Liquid fill lives beneath the skull outline */
+  .liquid-clip {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    /* SVG clip-path that matches the skull silhouette */
+    clip-path: url(#skullClip);
+  }
+
+  .liquid-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    /* height is set by JS based on progress */
+    height: 0%;
+    background: linear-gradient(
+      180deg,
+      rgba(190, 110, 255, 0.95) 0%,
+      rgba(120, 40, 220, 0.98) 60%,
+      rgba(80, 10, 180, 1) 100%
+    );
+    transition: height 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    z-index: 1;
+  }
+
+  /* Animated wave on top of the liquid */
+  .wave-container {
+    position: absolute;
+    top: -30px;
+    left: -10%;
+    width: 120%;
+    height: 50px;
+    z-index: 2;
+  }
+
+  .wave-svg {
+    width: 200%;
+    height: 100%;
+    animation: waveScroll 2.5s linear infinite;
+  }
+
+  @keyframes waveScroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* Shimmer bubbles inside liquid */
+  .bubble {
+    position: absolute;
+    bottom: 5%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+    animation: rise linear infinite;
+  }
+  .bubble:nth-child(1) { width: 8px;  height: 8px;  left: 20%; animation-duration: 3.2s; animation-delay: 0s; }
+  .bubble:nth-child(2) { width: 5px;  height: 5px;  left: 40%; animation-duration: 2.5s; animation-delay: 0.8s; }
+  .bubble:nth-child(3) { width: 10px; height: 10px; left: 60%; animation-duration: 4s;   animation-delay: 0.3s; }
+  .bubble:nth-child(4) { width: 6px;  height: 6px;  left: 75%; animation-duration: 2.8s; animation-delay: 1.2s; }
+  .bubble:nth-child(5) { width: 4px;  height: 4px;  left: 85%; animation-duration: 3.6s; animation-delay: 0.6s; }
+
+  @keyframes rise {
+    0%   { transform: translateY(0)   scale(1);   opacity: 0.6; }
+    80%  { opacity: 0.3; }
+    100% { transform: translateY(-280px) scale(1.2); opacity: 0; }
+  }
+
+  /* Glow pulse on the skull wrapper */
+  @keyframes glowPulse {
+    0%, 100% { filter: drop-shadow(0 0 18px rgba(160,80,255,0.85)) drop-shadow(0 0 40px rgba(120,40,220,0.5)); }
+    50%       { filter: drop-shadow(0 0 28px rgba(200,120,255,1))   drop-shadow(0 0 60px rgba(140,60,240,0.8)); }
+  }
+  .skull-wrapper { animation: glowPulse 3s ease-in-out infinite; }
+
+  /* ── Goal text info ── */
+  .goal-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .goal-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #e0c0ff;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    text-shadow: 0 0 12px rgba(180, 100, 255, 0.9);
+  }
+
+  .goal-amount {
+    font-size: 28px;
+    font-weight: bold;
+    color: #ffffff;
+    text-shadow: 0 0 16px rgba(200, 120, 255, 1), 0 0 30px rgba(160, 60, 255, 0.7);
+  }
+
+  .goal-percent {
+    font-size: 14px;
+    color: #c090ff;
+    letter-spacing: 2px;
+    text-shadow: 0 0 8px rgba(160, 80, 255, 0.8);
+  }
+
+  /* ── Donation event notification ── */
+  .donation-alert {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-80px);
+    background: rgba(40, 0, 80, 0.92);
+    border: 1px solid rgba(160, 80, 255, 0.6);
+    border-radius: 12px;
+    padding: 10px 20px;
+    color: #e0c0ff;
+    font-size: 15px;
+    letter-spacing: 1px;
+    text-align: center;
+    opacity: 0;
+    transition: transform 0.5s ease, opacity 0.5s ease;
+    z-index: 100;
+    white-space: nowrap;
+    box-shadow: 0 0 20px rgba(160, 80, 255, 0.5);
+  }
+  .donation-alert.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG clip-path definition matching skull silhouette (approximate convex hull) -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <clipPath id="skullClip" clipPathUnits="objectBoundingBox">
+      <!-- Approximate raven skull silhouette path (normalized 0–1) -->
+      <path d="
+        M 0.30,0.82
+        C 0.20,0.85 0.10,0.80 0.08,0.72
+        C 0.05,0.62 0.08,0.55 0.12,0.50
+        C 0.16,0.45 0.22,0.40 0.26,0.38
+        C 0.28,0.36 0.30,0.30 0.33,0.22
+        C 0.36,0.14 0.42,0.08 0.50,0.06
+        C 0.58,0.04 0.66,0.06 0.72,0.10
+        C 0.80,0.15 0.84,0.22 0.86,0.30
+        C 0.88,0.38 0.86,0.46 0.82,0.52
+        C 0.78,0.58 0.72,0.62 0.66,0.64
+        C 0.62,0.66 0.58,0.68 0.56,0.70
+        C 0.54,0.72 0.53,0.76 0.52,0.80
+        C 0.50,0.84 0.46,0.88 0.42,0.88
+        C 0.38,0.88 0.34,0.85 0.30,0.82 Z
+      "/>
+    </clipPath>
+  </defs>
+</svg>
+
+<div class="widget-container">
+
+  <div class="skull-wrapper" id="skullWrapper">
+    <!-- Liquid fill layer -->
+    <div class="liquid-clip">
+      <div class="liquid-fill" id="liquidFill">
+        <!-- Wave animation -->
+        <div class="wave-container">
+          <svg class="wave-svg" viewBox="0 0 800 50" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,25 C100,5 200,45 300,25 C400,5 500,45 600,25 C700,5 800,45 800,25 L800,50 L0,50 Z"
+                  fill="rgba(190,110,255,0.6)"/>
+            <path d="M0,30 C150,10 250,48 400,30 C550,12 650,48 800,30 L800,50 L0,50 Z"
+                  fill="rgba(150,70,230,0.5)"/>
+          </svg>
+        </div>
+        <!-- Bubbles -->
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+      </div>
+    </div>
+
+    <!-- Skull PNG on top -->
+    <img class="skull-img" id="skullImg"
+         src="https://i.imgur.com/placeholder.png"
+         alt="Raven Skull"
+         onerror="this.style.display='none'" />
+  </div>
+
+  <!-- Goal info -->
+  <div class="goal-info">
+    <div class="goal-title" id="goalTitle">DONATION GOAL</div>
+    <div class="goal-amount" id="goalAmountText">$0 / $500</div>
+    <div class="goal-percent" id="goalPercentText">0% REACHED</div>
+  </div>
+
+</div>
+
+<!-- Donation alert popup -->
+<div class="donation-alert" id="donationAlert"></div>
+
+<script>
+  // ══════════════════════════════════════════════
+  //  CONFIGURATION — edit these values
+  // ══════════════════════════════════════════════
+  const CONFIG = {
+    goalAmount:    500,      // Total goal in $
+    currentAmount: 0,        // Starting amount (StreamElements will update this)
+    currency:      '$',
+    goalLabel:     'DONATION GOAL',
+    // Path to the uploaded skull PNG — replace with your hosted URL
+    skullImageUrl: 'YOUR_SKULL_IMAGE_URL_HERE',
+  };
+
+  // ══════════════════════════════════════════════
+  //  STATE
+  // ══════════════════════════════════════════════
+  let current = CONFIG.currentAmount;
+  const goal  = CONFIG.goalAmount;
+
+  // Set skull image
+  document.getElementById('skullImg').src = CONFIG.skullImageUrl;
+  document.getElementById('goalTitle').textContent = CONFIG.goalLabel;
+
+  function updateWidget(amount, showAlert, donorName, donorAmount) {
+    current = Math.min(amount, goal);
+    const pct = Math.min((current / goal) * 100, 100);
+
+    // Update liquid height
+    document.getElementById('liquidFill').style.height = pct + '%';
+
+    // Update text
+    document.getElementById('goalAmountText').textContent =
+      `${CONFIG.currency}${current.toFixed(0)} / ${CONFIG.currency}${goal}`;
+    document.getElementById('goalPercentText').textContent =
+      `${Math.round(pct)}% REACHED`;
+
+    // Show donation alert if triggered
+    if (showAlert && donorName && donorAmount) {
+      const alert = document.getElementById('donationAlert');
+      alert.textContent = `✨ ${donorName} donated ${CONFIG.currency}${donorAmount}!`;
+      alert.classList.add('show');
+      setTimeout(() => alert.classList.remove('show'), 4000);
+    }
+  }
+
+  // Initial render
+  updateWidget(current);
+
+  // ══════════════════════════════════════════════
+  //  STREAMELEMENTS EVENT LISTENER
+  //  Paste this widget into StreamElements Custom Widget
+  //  and it will auto-connect to tip events.
+  // ══════════════════════════════════════════════
+  window.addEventListener('onEventReceived', function(obj) {
+    const event = obj.detail;
+    if (!event || !event.listener) return;
+
+    // Tip / donation events
+    if (event.listener === 'tip-latest' || event.listener === 'tip-session-top') {
+      const data = event.event;
+      if (!data) return;
+      const donorName   = data.name   || 'Anonymous';
+      const donorAmount = parseFloat(data.amount) || 0;
+      current += donorAmount;
+      updateWidget(current, true, donorName, donorAmount);
+    }
+  });
+
+  // StreamElements field data (set goal/current via widget fields)
+  window.addEventListener('onWidgetLoad', function(obj) {
+    const fieldData = obj.detail.fieldData;
+    if (fieldData) {
+      if (fieldData.goalAmount)   CONFIG.goalAmount   = parseFloat(fieldData.goalAmount);
+      if (fieldData.currentAmount) current            = parseFloat(fieldData.currentAmount);
+      if (fieldData.currency)     CONFIG.currency     = fieldData.currency;
+      if (fieldData.goalLabel)    {
+        document.getElementById('goalTitle').textContent = fieldData.goalLabel;
+      }
+      if (fieldData.skullImageUrl && fieldData.skullImageUrl !== 'YOUR_SKULL_IMAGE_URL_HERE') {
+        document.getElementById('skullImg').src = fieldData.skullImageUrl;
+      }
+      updateWidget(current);
+    }
+  });
+
+  // ── DEMO MODE (remove when using in StreamElements) ──
+  // Simulates donations arriving every 4 seconds for preview
+  if (window.location.href.includes('file://') || window.location.href.includes('localhost')) {
+    let demo = 0;
+    const donors = [
+      { name: 'RavenFan99', amt: 50 },
+      { name: 'NightOwl',   amt: 75 },
+      { name: 'PurpleMoon', amt: 100 },
+      { name: 'SkullKing',  amt: 30 },
+      { name: 'VoidWalker', amt: 120 },
+    ];
+    setInterval(() => {
+      if (demo < donors.length) {
+        const d = donors[demo++];
+        current += d.amt;
+        updateWidget(current, true, d.name, d.amt);
+      }
+    }, 3500);
+  }
+</script>
+</body>
+</html>
